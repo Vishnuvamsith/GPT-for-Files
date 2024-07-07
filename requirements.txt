@@ -34,3 +34,6 @@ azure-ai-documentintelligence
 Flask
 beautifulsoup4
 google
+speech_recognition
+googletrans
+werkzeug

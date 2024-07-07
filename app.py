@@ -174,6 +174,11 @@ from langchain_experimental.agents.agent_toolkits import create_csv_agent
 from langchain.prompts import PromptTemplate
 import requests
 from bs4 import BeautifulSoup
+import speech_recognition as sr
+from googletrans import Translator,LANGUAGES
+from werkzeug.utils import secure_filename
+UPLOAD_FOLDER = 'uploads'
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
 load_dotenv()
@@ -314,17 +319,80 @@ def pdf_qa():
 def ppt_qa():
     user_question = request.form.get('question')
     ppt_docs = request.files.getlist('file')
+    translator = Translator()
+    try:
+        # Detect language
+        detected_lang = translator.detect(user_question).lang
+        print(f"Detected language: {LANGUAGES.get(detected_lang, 'Unknown')}")
+
+        # Translate if necessary
+        if detected_lang != 'en':
+            translated_question = translator.translate(user_question, src=detected_lang, dest='en').text
+            print(f"Translated question: {translated_question}")
+        else:
+            translated_question = user_question
+    except Exception as e:
+        print(f"Error in translation: {e}")
+        return jsonify({"error": "Translation service failed."}), 500
     if ppt_docs:
         slides_content = get_ppt_content(ppt_docs)
         raw_text = "\n".join([content[0] for content in slides_content])
         text_chunks = get_text_chunks(raw_text)
         get_vector_store(text_chunks, "faiss_index_ppt")
-        response_text = user_input(user_question, "faiss_index_ppt")
+        response_text = user_input(translated_question, "faiss_index_ppt")
         
         # Collect relevant images
         slide_images = []
         for content in slides_content:
             if user_question.lower() in content[0].lower():
+                slide_images.extend(content[1])
+        
+        # Fetch related links
+        # Fetch related links based on the generated response text
+        related_links = fetch_related_links(response_text.split('\n')[0])
+        relevant_images = fetch_images(response_text.split('\n')[0])
+
+        
+        response = {
+            "text": response_text,
+            "images_from_slides": slide_images,
+            "images_from_internet": relevant_images,
+            "links": related_links
+        }
+        return jsonify(response)
+    else:
+        return jsonify({"error": "No PPT files uploaded."}), 400
+@app.route('/ppt/audio', methods=['POST'])
+def load_audio():
+    file = request.files['audio']
+    ppt_docs = request.files.getlist('file')
+    filename = secure_filename(file.filename)
+    file_path = os.path.join(UPLOAD_FOLDER, filename)
+    file.save(file_path)
+
+    recognizer = sr.Recognizer()
+    with sr.AudioFile(file_path) as source:
+        audio_data = recognizer.record(source)
+        transcription = recognizer.recognize_google(audio_data, show_all=True)
+
+    detected_language = transcription['alternative'][0]['language']
+    transcribed_text = transcription['alternative'][0]['transcript']
+
+    if detected_language != 'en':
+        translator = Translator()
+        translated = translator.translate(transcribed_text, src=detected_language, dest='en')
+        transcribed_text = translated.text
+    if ppt_docs:
+        slides_content = get_ppt_content(ppt_docs)
+        raw_text = "\n".join([content[0] for content in slides_content])
+        text_chunks = get_text_chunks(raw_text)
+        get_vector_store(text_chunks, "faiss_index_ppt")
+        response_text = user_input(transcribed_text, "faiss_index_ppt")
+        
+        # Collect relevant images
+        slide_images = []
+        for content in slides_content:
+            if transcribed_text.lower() in content[0].lower():
                 slide_images.extend(content[1])
         
         # Fetch related links
