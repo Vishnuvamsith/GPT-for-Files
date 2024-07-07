@@ -10,8 +10,6 @@ router.post('/load', async (req, res) => {
     const files = req.files.file;
 
     const formData = new FormData();
-
-    // Adding files to formData
     if (Array.isArray(files)) {
       files.forEach((file) => {
         formData.append('file', file.data, file.name);
@@ -19,8 +17,6 @@ router.post('/load', async (req, res) => {
     } else {
       formData.append('file', files.data, files.name);
     }
-
-    // Adding question as a field
     formData.append('question', question);
 
     const response = await axios.post('http://localhost:5000/api/pdf', formData, {
