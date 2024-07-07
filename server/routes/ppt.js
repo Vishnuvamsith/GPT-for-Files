@@ -7,9 +7,9 @@ const router = express.Router();
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 const { Translate } = require('@google-cloud/translate').v2;
-const translate = new Translate({
-  key: "AIzaSyBR_A6TRv4mmI0I_nm5PSC8CAeiDC5CSYk", // Replace with your Google Cloud API key
-});
+// const translate = new Translate({
+//   key: "AIzaSyBR_A6TRv4mmI0I_nm5PSC8CAeiDC5CSYk", // Replace with your Google Cloud API key
+// });
 
 router.post('/audio', (req, res) => {
   const busboy = new Busboy({ headers: req.headers });
@@ -66,53 +66,10 @@ router.post('/audio', (req, res) => {
 
 
 
-// router.post('/load', async (req, res) => {
-//   try {
-//     const question = req.body.question;
-//     const files = req.files.file;
-
-//     const formData = new FormData();
-
-//     // Adding files to formData
-//     if (Array.isArray(files)) {
-//       files.forEach((file) => {
-//         formData.append('file', file.data, file.name);
-//       });
-//     } else {
-//       formData.append('file', files.data, files.name);
-//     }
-
-//     // Adding question as a field
-//     formData.append('question', question);
-
-//     const response = await axios.post('http://localhost:5000/api/ppt', formData, {
-//       headers: {
-//         ...formData.getHeaders(),
-//       },
-//     });
-//     console.log('Response from backend:', response.data);
-
-//     res.json(response.data);
-//   } catch (error) {
-//     console.error(error);
-//     res.status(500).json({ error: 'An error occurred' });
-//   }
-// });
-router.post('/load',async (req, res) => {
+router.post('/load', async (req, res) => {
   try {
     const question = req.body.question;
     const files = req.files.file;
-
-    // Detect language and translate if necessary
-    let translatedQuestion = question;
-    const [detection] = await translate.detect(question);
-
-    if (detection.language !== 'en') {
-      console.log(`Detected language: ${detection.language}`);
-      const [translation] = await translate.translate(question, 'en');
-      translatedQuestion = translation;
-      console.log(`Translated question: ${translatedQuestion}`);
-    }
 
     const formData = new FormData();
 
@@ -125,22 +82,65 @@ router.post('/load',async (req, res) => {
       formData.append('file', files.data, files.name);
     }
 
-    // Adding translated question as a field
-    formData.append('question', translatedQuestion);
+    // Adding question as a field
+    formData.append('question', question);
 
-    // Forwarding the request to the backend
     const response = await axios.post('http://localhost:5000/api/ppt', formData, {
       headers: {
         ...formData.getHeaders(),
       },
     });
-
     console.log('Response from backend:', response.data);
+
     res.json(response.data);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'An error occurred' });
   }
 });
+// router.post('/load',async (req, res) => {
+//   try {
+//     const question = req.body.question;
+//     const files = req.files.file;
+
+//     // Detect language and translate if necessary
+//     let translatedQuestion = question;
+//     const [detection] = await translate.detect(question);
+
+//     if (detection.language !== 'en') {
+//       console.log(`Detected language: ${detection.language}`);
+//       const [translation] = await translate.translate(question, 'en');
+//       translatedQuestion = translation;
+//       console.log(`Translated question: ${translatedQuestion}`);
+//     }
+
+//     const formData = new FormData();
+
+//     // Adding files to formData
+//     if (Array.isArray(files)) {
+//       files.forEach((file) => {
+//         formData.append('file', file.data, file.name);
+//       });
+//     } else {
+//       formData.append('file', files.data, files.name);
+//     }
+
+//     // Adding translated question as a field
+//     formData.append('question', translatedQuestion);
+
+//     // Forwarding the request to the backend
+//     const response = await axios.post('http://localhost:5000/api/ppt', formData, {
+//       headers: {
+//         ...formData.getHeaders(),
+//       },
+//     });
+
+//     console.log('Response from backend:', response.data);
+//     res.json(response.data);
+//   } catch (error) {
+//     console.error(error);
+//     res.status(500).json({ error: 'An error occurred' });
+//   }
+// });
 
 module.exports = router;

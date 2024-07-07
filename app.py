@@ -1,9 +1,13 @@
+
+
 # from flask import Flask, request, jsonify
 # from dotenv import load_dotenv
 # import uuid
 # from PyPDF2 import PdfReader
 # from pptx import Presentation
 # import os
+# from pptx.enum.shapes import MSO_SHAPE_TYPE
+# import tempfile
 # import google.generativeai as genai
 # from langchain_experimental.agents import create_csv_agent
 # from langchain.llms import OpenAI
@@ -23,6 +27,9 @@
 # from langchain_google_genai import ChatGoogleGenerativeAI
 # from langchain_experimental.agents.agent_toolkits import create_csv_agent
 # from langchain.prompts import PromptTemplate
+# import requests
+# from bs4 import BeautifulSoup
+
 
 # load_dotenv()
 # genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
@@ -40,15 +47,26 @@
 #             agent = create_csv_agent(model, f.name, verbose=True)
 #             response = agent.run(query)
 #             return response
-# def get_ppt_text(ppt_docs):
-#     text = ""
+
+# def get_ppt_content(ppt_docs):
+#     slides_content = []
 #     for ppt in ppt_docs:
 #         prs = Presentation(ppt)
 #         for slide in prs.slides:
+#             slide_text = ""
+#             slide_images = []
 #             for shape in slide.shapes:
+#                 if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
+#                     image = shape.image
+#                     image_bytes = image.blob
+#                     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as img_file:
+#                         img_file.write(image_bytes)
+#                         img_file.flush()
+#                         slide_images.append(img_file.name)
 #                 if hasattr(shape, "text"):
-#                     text += shape.text + "\n"
-#     return text
+#                     slide_text += shape.text + "\n"
+#             slides_content.append((slide_text, slide_images))
+#     return slides_content
 
 # def get_pdf_text(pdf_docs):
 #     text = ""
@@ -57,6 +75,7 @@
 #         for page in pdf_reader.pages:
 #             text += page.extract_text()
 #     return text
+
 # def get_text_chunks(text):
 #     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
 #     chunks = text_splitter.split_text(text)
@@ -70,6 +89,7 @@
 # def load_vector_store(vector_store_path):
 #     embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
 #     return FAISS.load_local(vector_store_path, embeddings, allow_dangerous_deserialization=True)
+
 # def get_conversational_chain():
 #     prompt_template = """
 #     Answer the question as detailed as possible from the provided context, make sure to provide all the details, if the answer is not in
@@ -82,7 +102,6 @@
 #     prompt = PromptTemplate(template=prompt_template, input_variables=["context", "question"])
 #     chain = load_qa_chain(model, chain_type="stuff", prompt=prompt)
 #     return chain
-
 
 # def user_input(user_question, vector_store_path):
 #     new_db = load_vector_store(vector_store_path)
@@ -99,13 +118,38 @@
 #         response = model.generate_content(image)
 #     return response.text
 
+# def fetch_related_links(query):
+#     search_url = "https://www.googleapis.com/customsearch/v1"
+#     params = {
+#         'key': os.getenv('GOOGLE_KEY'),
+#         'cx': os.getenv('SEARCH_ENGINE_ID'),
+#         'q': query
+#     }
+#     response = requests.get(search_url, params=params)
+#     search_results = response.json()
+#     links = [item['link'] for item in search_results.get('items', [])]
+#     return links
+# def fetch_images(query):
+#     search_url = "https://www.google.com/search"
+#     params = {
+#         'q': query,
+#         'tbm': 'isch'
+#     }
+#     headers = {
+#         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
+#     response = requests.get(search_url, params=params, headers=headers)
+#     soup = BeautifulSoup(response.text, 'html.parser')
+#     images = [img['src'] for img in soup.find_all('img') if img.has_attr('src')]
+#     # Filter out non-image URLs
+#     images = [img for img in images if img.startswith('http')]
+#     return images
+
 # @app.route('/api/excel', methods=['POST'])
 # def excel_qa():
 #     file = request.files.get('file')
 #     query = request.form.get('query')
 #     response = load_excel_and_convert_to_csv(file, query)
 #     return jsonify({'response': response})
-
 
 # @app.route('/api/pdf', methods=['POST'])
 # def pdf_qa():
@@ -126,11 +170,31 @@
 #     user_question = request.form.get('question')
 #     ppt_docs = request.files.getlist('file')
 #     if ppt_docs:
-#         raw_text = get_ppt_text(ppt_docs)
+#         slides_content = get_ppt_content(ppt_docs)
+#         raw_text = "\n".join([content[0] for content in slides_content])
 #         text_chunks = get_text_chunks(raw_text)
 #         get_vector_store(text_chunks, "faiss_index_ppt")
-#         response = user_input(user_question, "faiss_index_ppt")
-#         return jsonify({"response": response})
+#         response_text = user_input(user_question, "faiss_index_ppt")
+        
+#         # Collect relevant images
+#         slide_images = []
+#         for content in slides_content:
+#             if user_question.lower() in content[0].lower():
+#                 slide_images.extend(content[1])
+        
+#         # Fetch related links
+#         # Fetch related links based on the generated response text
+#         related_links = fetch_related_links(response_text.split('\n')[0])
+#         relevant_images = fetch_images(response_text.split('\n')[0])
+
+        
+#         response = {
+#             "text": response_text,
+#             "images_from_slides": slide_images,
+#             "images_from_internet": relevant_images,
+#             "links": related_links
+#         }
+#         return jsonify(response)
 #     else:
 #         return jsonify({"error": "No PPT files uploaded."}), 400
 
@@ -143,7 +207,9 @@
 #     return jsonify({'response': response})
 
 # if __name__ == '__main__':
-#     app.run(port=5000, debug=True)
+#     port = int(os.environ.get('PORT', 5000))
+#     app.run(host='0.0.0.0', port=port)
+
 
 from flask import Flask, request, jsonify
 from dotenv import load_dotenv
@@ -242,7 +308,7 @@ def load_vector_store(vector_store_path):
 
 def get_conversational_chain():
     prompt_template = """
-    Answer the question as detailed as possible from the provided context, make sure to provide all the details, if the answer is not in
+    Answer the question as detailed as possible from the provided context, make sure to provide all the details,and also sometimes the question might not always be in english so u gotta convert it to english and then find the necessay answer provided to you in the context, if the answer is not in
     provided context just say, "answer is not available in the context", don't provide the wrong answer\n\n
     Context:\n {context}?\n
     Question: \n{question}\n
@@ -322,6 +388,7 @@ def ppt_qa():
     translator = Translator()
     try:
         # Detect language
+        print(user_question)
         detected_lang = translator.detect(user_question).lang
         print(f"Detected language: {LANGUAGES.get(detected_lang, 'Unknown')}")
 
@@ -421,4 +488,3 @@ def vision():
 
 if __name__ == '__main__':
     app.run(port=5000, debug=True)
-
