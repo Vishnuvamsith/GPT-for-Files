@@ -1,0 +1,5 @@
+node_modules
+.env
+env
+faiss_index_pdf
+faiss_index_ppt

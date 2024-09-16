@@ -1,0 +1,15 @@
+Flask
+google-generativeai
+python-dotenv
+langchain
+langchain_experimental
+requests
+bs4
+beautifulsoup4
+googletrans
+pillow
+werkzeug
+PyPDF2
+python-pptx
+faiss-cpu
+langchain_google_genai
